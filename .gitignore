@@ -11,6 +11,7 @@
 !AD/check_bgc_spinup.py
 
 # ignore typical junk
+.ipynb_checkpoints/
 AD/__pycache__/
 AD/logs/
 AD/*.ipynb
