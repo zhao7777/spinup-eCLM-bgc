@@ -1,0 +1,17 @@
+# allow git control of .gitignore and README
+!.gitignore
+!README.md
+
+# allow AD subfolder selected contents
+!AD/CLM5_EU3_BGC_DETECT_spinup_AD/
+!AD/figs/
+!AD/helper_func.py
+!AD/run_bgc_spinup.py
+!AD/create_ensemble_namelists.py
+!AD/check_bgc_spinup.py
+
+# ignore typical junk
+AD/__pycache__/
+AD/logs/
+AD/*.ipynb
+AD/*.txt
