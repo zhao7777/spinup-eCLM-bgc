@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 import importlib
 
-sys.path.append("/p/project1/cjibg36/jibg3674/BGC_spinup/")
+sys.path.append("/p/project1/cjibg36/jibg3674/BGC_spinup/AD")
 
 import create_ensemble_namelists
 import helper_func
@@ -69,14 +69,14 @@ syear = int(str(sdate)[:4])
 eyear = int(str(edate)[:4])
 
 # Spinup config
-total_cycles = 20
+total_cycles = 39
 prefix = 'eur11_bgc_spinup'
 name = "BGC_SPINUP"
 nprocs = 384
 nreal = 1
 ntasks = nprocs * nreal
 ntasks_per_node = 48
-stime = "05:00:00"
+stime = "08:00:00"
 spart = "batch"
 sacc = "jibg36"
 check_interval = 1800  # 30 minutes

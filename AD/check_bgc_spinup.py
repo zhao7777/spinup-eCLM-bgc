@@ -208,6 +208,7 @@ def make_total_panel(cycles, series, deltas, eq_cycle, pct_area_noeq, glob_thres
             ax.axhline(glob_thresh_area, ls="--", lw=0.6, color="gray")
             _ncl_axes_style(ax, ylabel="%",title="% Land Area in TOTECOSYSC Disequil")
             ax.set_xlim(years[0], years[-1])
+            print(pct_area_noeq)
             continue
         if which != "Δ":
             y = series[v]
@@ -224,7 +225,10 @@ def make_total_panel(cycles, series, deltas, eq_cycle, pct_area_noeq, glob_thres
             y = deltas[v]
             ax.plot(years[1:], y, marker="o", markersize=3, lw=0.6, color="black")
             add_thresh(ax, glob_thresh[v], color="gray")
-            _ncl_axes_style(ax, ylabel="Δ per year", xlabel="Cycle", title=f"Δ {v}")
+            _ncl_axes_style(ax, ylabel=dict(
+                TOTECOSYSC="Pg C", TOTSOMC="Pg C", TOTVEGC="Pg C",
+                TLAI="m$^2$ m$^{-2}$", GPP="Pg C yr$^{-1}$", TWS="m"
+            )[v], xlabel="Cycle", title=f"Δ {v}")
             if v in ("TOTECOSYSC","TOTSOMC","TOTVEGC","TLAI","GPP"):
                 ax.set_ylim(-0.8, 0.8)
             elif v in ("TWS","TLAI",):
