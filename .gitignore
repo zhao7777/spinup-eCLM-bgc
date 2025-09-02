@@ -16,3 +16,4 @@ AD/__pycache__/
 AD/logs/
 AD/*.ipynb
 AD/*.txt
+*.png
