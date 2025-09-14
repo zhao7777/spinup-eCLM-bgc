@@ -13,12 +13,20 @@ import geocat.viz.util as gvutil
 import os
 os.environ["MPLBACKEND"] = "Agg" 
 from glob import glob
+import gc
 
+import psutil
+
+def log_mem(stage=""):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1024**2  # in MB
+    print(f"[MEM] {stage} - RSS Memory: {mem:.2f} MB")
+    
 # -----------------------------
 # Helpers
 # -----------------------------
 
-def _open_cycle_dataset(cdir, years):
+def _open_cycle_dataset(cdir, years, variables):
     files = []
     for y in years:
         files.extend(sorted(glob(f"{cdir}/{caseid}.clm2.{hist_ext}.{y:04d}*.nc")))
@@ -30,6 +38,8 @@ def _open_cycle_dataset(cdir, years):
         combine="by_coords",
         decode_times=True,
         use_cftime=True,
+        chunks={},
+        drop_variables=[v for v in xr.open_dataset(files[0]).variables if v not in variables and v != "time"]
     )
     
 def _annual_means_by_year(ds):
@@ -58,7 +68,7 @@ def _as_float(x):
             x = x.compute()       # trigger Dask
         if hasattr(x, "values"):
             x = x.values          # get ndarray / scalar
-        return float(x)            # Python float
+        return float(x)           # Python float
     except Exception:
         return float(np.asarray(x))
 
@@ -71,20 +81,30 @@ def _global_aggregate(varname, annual_da, landarea):
     annual_da dims: (lat, lon) or with extra singleton dims.
     """
     # align dims
-    da = annual_da
+    da, landarea_aligned = xr.align(annual_da, landarea, join="exact")
+
     if varname in ("TOTECOSYSC", "TOTSOMC", "TOTVEGC"):
-        res = (da * landarea).sum() * 1e-15                 # Pg
+        # gC/m2 * m2 = gC → sum → Pg
+        res = (da * landarea_aligned).sum() * 1e-15
         return _as_float(res)
-    if varname == "GPP":
-        res = (da * secinyr * landarea).sum() * 1e-15       # Pg/yr
+
+    elif varname == "GPP":
+        # gC/m2/s * sec/year * m2 = gC/year → sum → Pg/year
+        res = (da * secinyr * landarea_aligned).sum() * 1e-15
         return _as_float(res)
-    if varname == "TLAI":
-        res = (da * landarea).sum() / landarea.sum()        # m2/m2 (weighted mean)
+
+    elif varname == "TLAI":
+        # weighted mean (unitless)
+        res = (da * landarea_aligned).sum() / landarea_aligned.sum()
         return _as_float(res)
-    if varname == "TWS":
-        res = ((da * landarea).sum() / landarea.sum()) / 1e3  # m (mm→m)
+
+    elif varname == "TWS":
+        # mm * m2 = mm-m2 → mean → convert to meters
+        res = ((da * landarea_aligned).sum() / landarea_aligned.sum()) / 1e3
         return _as_float(res)
-    raise ValueError(f"Unsupported variable {varname}")
+
+    else:
+        raise ValueError(f"Unsupported variable {varname}")
 
 def _compute_deltas_over_subper(series, subper):
     series = np.asarray(series)
@@ -229,8 +249,8 @@ def make_total_panel(cycles, series, deltas, eq_cycle, pct_area_noeq, glob_thres
                 TOTECOSYSC="Pg C", TOTSOMC="Pg C", TOTVEGC="Pg C",
                 TLAI="m$^2$ m$^{-2}$", GPP="Pg C yr$^{-1}$", TWS="m"
             )[v], xlabel="Cycle", title=f"Δ {v}")
-            if v in ("TOTECOSYSC","TOTSOMC","TOTVEGC","TLAI","GPP"):
-                ax.set_ylim(-0.8, 0.8)
+            if v in ("TOTECOSYSC","TOTSOMC","TOTVEGC","GPP"):
+                ax.set_ylim(-0.1, 0.1)
             elif v in ("TWS","TLAI",):
                 ax.set_ylim(-0.04, 0.04)
             ax.set_xlim(years[0], years[-1])
@@ -307,19 +327,28 @@ for d in sorted(glob(f"{base_spinup_dir}/{start_y:04d}0101_{start_y+n_years:04d}
 path_grid = "/p/project1/cjibg36/jibg3674/shared_DA/setup_eclm_cordex_444x432_v9/input_clm"
 file_grid = "domain.lnd.EUR-11_EUR-11.230216_mask.nc"
 domain = xr.open_dataset(os.path.join(path_grid, file_grid))
-
 lat = domain['yc']
 lon = domain['xc']
+domain.close()
 
 # Variables & thresholds
 variables = ["TOTECOSYSC", "TOTSOMC", "TOTVEGC", "TLAI", "GPP", "TWS"]
+# glob_thresh = {
+#     "TOTECOSYSC": 0.02,   # Pg C / yr
+#     "TOTSOMC":    0.02,   # Pg C / yr
+#     "TOTVEGC":    0.02,   # Pg C / yr
+#     "TLAI":       0.02,   # m2/m2 per yr (change in global mean)
+#     "GPP":        0.02,   # Pg C / yr^2 (change in PgC/yr per yr)
+#     "TWS":        0.001,  # m / yr
+# }
+
 glob_thresh = {
-    "TOTECOSYSC": 0.02,   # Pg C / yr
-    "TOTSOMC":    0.02,   # Pg C / yr
-    "TOTVEGC":    0.02,   # Pg C / yr
-    "TLAI":       0.02,   # m2/m2 per yr (change in global mean)
-    "GPP":        0.02,   # Pg C / yr^2 (change in PgC/yr per yr)
-    "TWS":        0.001,  # m / yr
+    "TOTECOSYSC": 0.002,   # Pg C / yr
+    "TOTSOMC":    0.002,   # Pg C / yr
+    "TOTVEGC":    0.002,   # Pg C / yr
+    "TLAI":       0.02,    # m2/m2 per yr (change in global mean)
+    "GPP":        0.002,   # Pg C / yr^2 (change in PgC/yr per yr)
+    "TWS":        0.001,   # m / yr
 }
 
 # For % land area in disequilibrium (TOTECOSYSC only)
@@ -338,19 +367,19 @@ series = {v: [] for v in variables}
 # For TOTECOSYSC maps and area-% we also keep the annual field at the end of each cycle
 fields_totecosysc = []
 # Cache a representative landarea for area-% calc
-landarea_da = None
+
+landfrac = domain["frac"].rename({"nj": "lat", "ni": "lon"})
+ncfile = xr.open_dataset("/p/scratch/cjibg36/jibg3674/eCLM_BGC_SPINUP/AD/19600101_19700101_cycle00/clmoas.clm2.h0.1960-02-01-00000.nc")
+ncfile.close()
+area = ncfile["area"] * 1e6  # convert km^2 -> m^2
+landarea = area * landfrac
+
 
 for ic, cdir in enumerate(cycle_dirs):
+    print(f"[{ic+1}/{len(cycle_dirs)}] Processing: {cdir}")
+#     log_mem("Before loading dataset")
     years = list(range(start_y, start_y + n_years))
-    ds = _open_cycle_dataset(cdir, years)
-    if "area" not in ds.variables or "landfrac" not in ds.variables:
-        raise KeyError("Dataset must contain 'area' (m2 gridcell) and 'landfrac' (0-1)")
-    area = ds["area"] * 1e6  # convert km^2 -> m^2 if needed; adjust if already in m^2
-    landfrac = ds["landfrac"]
-    landarea = area * landfrac
-    if landarea_da is None:
-        landarea_da = landarea.load()
-
+    ds = _open_cycle_dataset(cdir, years, variables)
     groups = _annual_means_by_year(ds)
     end_year = years[-1]
     ds_last = _get_last_year_annual(groups, end_year)
@@ -364,11 +393,13 @@ for ic, cdir in enumerate(cycle_dirs):
                 raise KeyError(f"Variable {v} missing in dataset")
         val = _global_aggregate(v, ds_last[v], landarea)
         series[v].append(val)
-
+        
     # Save field for TOTECOSYSC area-% and maps (keep in gC m^-2)
     fields_totecosysc.append(ds_last["TOTECOSYSC"].load())
-
+#     log_mem(f"After aggregation cycle {ic}")
     ds.close()
+    del ds
+    gc.collect
 
 cycles = np.arange(len(cycle_dirs))
 
@@ -382,15 +413,9 @@ deltas = {v: _compute_deltas_over_subper(series[v], subper) for v in variables}
 eq_cycle = {}
 for v in variables:
     eq_cycle[v] = _equilibrium_cycle(series[v], glob_thresh[v], subper)
-    
-area2d     = _squeeze_2d(area)
-landfrac2d = _squeeze_2d(landfrac)
-landarea2d = (area2d * landfrac2d)
-if ic == 0:
-    landarea_da = landarea2d
 
 # % land area in disequilibrium for TOTECOSYSC only
-pct_area_noeq = _pct_landarea_disequil_totecosysc(fields_totecosysc, landarea2d, cell_thresh, subper)
+pct_area_noeq = _pct_landarea_disequil_totecosysc(fields_totecosysc, landarea, cell_thresh, subper)
 
 # For threshold-vs-sustained equilibrium year on area %: we want last sustained-to-end under thresh
 area_eq_cycle = _equilibrium_cycle(100.0 - pct_area_noeq, 100.0 - glob_thresh_area, 1)  # same logic: we want >= (100-thresh) to be OK
