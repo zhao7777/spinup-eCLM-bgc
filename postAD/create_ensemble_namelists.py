@@ -791,7 +791,7 @@ def write_stream_files(rundir, iens, nreal, sdate, edate, stream):
     nl_string += '    </variableNames>\n'
     nl_string += '    <filePath>\n'
     if stream in ["TPQW", "Precip", "Solar"]:
-        nl_string += '      /p/scratch/cjibg36/jibg3674/ERA5_forcing/data_out/\n'
+        nl_string += '      /p/scratch/cjibg36/jibg3674/ERA5_forcing/data_out_noleap/\n'
     if stream in ["TPQW_noise", "Precip_noise", "Solar_noise"]:
         nl_string += '      /p/project1/detectc01/clm_inputfiles/forcings/noise/\n'
     nl_string += '    </filePath>\n'

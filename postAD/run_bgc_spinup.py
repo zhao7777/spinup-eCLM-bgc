@@ -25,8 +25,8 @@ def get_cycle_dates(cycle):
     edate = int(datetime(end_year, 12, 31).strftime('%Y%m%d'))
     return sdate, edate
 
-def restart_successful(rundir, eyear):
-    eyear_str = f"{eyear:04d}"
+def restart_successful(rundir, edate_str):
+    eyear_str = edate_str[:4]
     restart_file = os.path.join(rundir, f"clmoas.clm2.r.{eyear_str}-01-01-00000.nc")
     return os.path.isfile(restart_file)
 
@@ -71,14 +71,14 @@ def setup_spinup_rundir(cycle, rundir, restart_file, sdate_str, edate_str, atmf_
 
 
 # Spinup config
-total_cycles = 2
+total_cycles = 80
 prefix = 'eur11_bgc_spinup'
 name = "BGC_SPINUP"
 nprocs = 384
 nreal = 1
 ntasks = nprocs * nreal
 ntasks_per_node = 48
-stime = "05:00:00"
+stime = "06:30:00"
 spart = "batch"
 sacc = "jibg36"
 check_interval = 1800  # 30 minutes
@@ -104,7 +104,7 @@ for cycle in range(1, total_cycles + 1):
     edate_str = f"{edate:08d}"
     rundir_name = f"run_{sdate_str}_{edate_str}"
     rundir = os.path.join(base_rundir, rundir_name)
-    if restart_file_exists(rundir):
+    if restart_file_exists(rundir) and restart_successful(rundir, edate_str):
         last_completed_cycle = cycle
     else:
         break
@@ -119,6 +119,7 @@ print(f"[{datetime.now()}] Resuming from cycle {start_cycle} of {total_cycles}..
 
 # Main spinup loop
 for cycle in range(start_cycle, total_cycles + 1):
+    sdate, edate = get_cycle_dates(cycle)
     sdate_str = f"{sdate:08d}"
     edate_str = f"{edate:08d}"
     rundir_name = f"run_{sdate_str}_{edate_str}"
@@ -151,7 +152,7 @@ for cycle in range(start_cycle, total_cycles + 1):
 
     # Submit job and monitor
     success = submit_and_monitor_job(rundir, jobscript, check_interval=check_interval)
-    if not success or not restart_successful(rundir):
+    if not success or not restart_successful(rundir, edate_str):
         print(f"[{datetime.now()}] ERROR: Cycle {cycle} failed.")
         break
     else:
